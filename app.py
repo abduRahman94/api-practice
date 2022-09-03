@@ -2,12 +2,14 @@ import json
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+from flask_cors import CORS, cross_origin
 
 
 app = Flask(__name__)
 app.config.from_object('config')
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+cors = CORS(app, resources={r"/api/*": {"origins": "http://127.0.0.1:5500"}})
 
 
 class Student(db.Model):
@@ -25,18 +27,24 @@ class Student(db.Model):
             'program': self.program,
         }
 
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Credentials', True)
+    return response
 
-@app.route('/students', methods=['GET', 'POST'])
+
+@app.route('/api/students', methods=['GET', 'POST'])
+@cross_origin()
 def students():
     if request.method == 'GET':
         students = [student.format() for student in Student.query.all()]
-        
         return jsonify({'students': students})
     
     if request.method == 'POST':
-        name = request.form.get('name', None)
-        surname = request.form.get('surname', None)
-        program = request.form.get('program', None)
+        data = request.get_json()
+        name = data.get('name')
+        surname = data.get('surname')
+        program = data.get('program')
         
         student = Student(name=name, surname=surname, program=program)
         db.session.add(student)
@@ -47,7 +55,7 @@ def students():
             'message': 'Created successfully'
         })
 
-@app.route('/students/<int:id>', methods=['GET'])
+@app.route('/api/students/<int:id>', methods=['GET'])
 def student(id):
     try:
         student = Student.query.get(id)
@@ -55,14 +63,15 @@ def student(id):
     except AttributeError:
         return jsonify({
             'message': 'Student does\'t exist'
-        })
+        }), 404
 
-@app.route('/students/<int:id>', methods=['PUT', 'PATCH'])
+@app.route('/api/students/<int:id>', methods=['PUT', 'PATCH'])
 def update_student(id):
     if request.method == 'PUT':
-        name = request.form.get('name', None)
-        surname = request.form.get('surname', None)
-        program = request.form.get('program', None)
+        data = request.get_json()
+        name = data.get('name')
+        surname = data.get('surname')
+        program = data.get('program')
         
         try:
             student = Student.query.get(id)
@@ -78,10 +87,10 @@ def update_student(id):
         except AttributeError:
             return jsonify({
             'message': 'Student does\'t exist'
-        })
+        }), 404
 
 
-@app.route('/students/<int:id>', methods=['DELETE'])
+@app.route('/api/students/<int:id>', methods=['DELETE'])
 def delete_student(id):
     try:
         student = Student.query.get(id)
@@ -94,4 +103,19 @@ def delete_student(id):
     except AttributeError:
         return jsonify({
             'message': 'Student does\'t exist'
-        })
+        }), 404
+
+
+@app.errorhandler(404)
+def not_found():
+    return jsonify({
+        'error': 404,
+        'message': '404 Not found'
+    })
+
+@app.errorhandler(500)
+def not_found():
+    return jsonify({
+        'error': 500,
+        'message': 'Internal Server Error'
+    })
